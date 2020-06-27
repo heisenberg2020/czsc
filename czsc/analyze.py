@@ -210,6 +210,7 @@ class KlineAnalyze(object):
         :param handle_last: bool
             是否使用默认的 handle_last 方法，默认值为 True
         """
+        print("start KlineAnalyze init")
         self.name = name
         assert bi_mode in ['new', 'old'], "bi_mode 参数错误"
         assert xd_mode in ['loose', 'strict'], "bi_mode 参数错误"
