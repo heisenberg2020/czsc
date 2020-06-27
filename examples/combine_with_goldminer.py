@@ -13,7 +13,7 @@ from datetime import datetime
 from czsc import KlineAnalyze, SolidAnalyze
 
 # 在这里设置你的掘金token，用于获取数据
-set_token("your gm token")
+set_token("03210e0e39013a46836b3afb9d25b57b871df5a2")
 
 
 def get_kline(symbol, end_date=None, freq='1d', k_count=5000):
@@ -31,6 +31,12 @@ def get_kline(symbol, end_date=None, freq='1d', k_count=5000):
     """
     if not end_date:
         end_date = datetime.now()
+
+    print(symbol)
+    print(freq)
+    print(end_date)
+    print(k_count)
+
     df = history_n(symbol=symbol, frequency=freq, end_time=end_date,
                    fields='symbol,eob,open,close,high,low,volume',
                    count=k_count, df=True)
