@@ -10,13 +10,18 @@ date: 2020-02-02
 
 from gm.api import *
 from datetime import datetime
-from czsc import KlineAnalyze, SolidAnalyze
+from czsc import KlineAnalyze, SolidAnalyze, Logger
+import pandas as pd
+
+
 
 # 在这里设置你的掘金token，用于获取数据
 set_token("03210e0e39013a46836b3afb9d25b57b871df5a2")
 
+log = Logger('all.log',level='debug').logger
 
-def get_kline(symbol, end_date=None, freq='1d', k_count=5000):
+
+def get_kline(symbol, end_date=None, freq='1d', k_count=30):
     """从掘金获取历史K线数据
 
     参考： https://www.myquant.cn/docs/python/python_select_api#6fb030ec42984aff
@@ -32,10 +37,10 @@ def get_kline(symbol, end_date=None, freq='1d', k_count=5000):
     if not end_date:
         end_date = datetime.now()
 
-    print(symbol)
-    print(freq)
-    print(end_date)
-    print(k_count)
+    log.debug(symbol)
+    log.debug(freq)
+    log.debug(end_date)
+    log.debug(k_count)
 
     df = history_n(symbol=symbol, frequency=freq, end_time=end_date,
                    fields='symbol,eob,open,close,high,low,volume',
@@ -51,10 +56,12 @@ def get_kline(symbol, end_date=None, freq='1d', k_count=5000):
 
     for col in ['open', 'close', 'high', 'low']:
         df[col] = df[col].apply(round, args=(2,))
+
+    log.debug(df)
     return df
 
 
-def get_klines(symbol, end_date=None, freqs='60s,300s,1800s,1d', k_count=5000):
+def get_klines(symbol, end_date=None, freqs='60s,300s,1800s,1d', k_count=300):
     """获取不同级别K线"""
     freq_map = {"60s": "1分钟", "300s": "5分钟", "1800s": "30分钟", "1d": "日线"}
     klines = dict()
@@ -68,7 +75,7 @@ def get_klines(symbol, end_date=None, freqs='60s,300s,1800s,1d', k_count=5000):
 def use_kline_analyze():
     print('=' * 100, '\n')
     print("KlineAnalyze 的使用方法：\n")
-    kline = get_kline(symbol='SHSE.000300', end_date="2020-02-02")
+    kline = get_kline(symbol='SHSE.000001', end_date="2020-06-24")
     ka = KlineAnalyze(kline)
     print("线段：", ka.xd, "\n")
     print("中枢：", ka.zs, "\n")
@@ -86,7 +93,12 @@ def use_solid_analyze():
 
 
 if __name__ == '__main__':
+
+    log.debug('start')
+    pd.set_option('display.max_columns', None)    # 显示所有列
+    pd.set_option('display.max_rows', None)      # 显示所有行
+
     use_kline_analyze()
-    use_solid_analyze()
+    #use_solid_analyze()
 
 

@@ -6,6 +6,9 @@ from functools import lru_cache
 
 from .ta import macd, ma, boll
 from .utils import plot_kline, plot_ka
+from .logger import Logger
+
+log = Logger('all.log',level='debug').logger
 
 
 def is_bei_chi(ka, zs1, zs2, mode="bi", adjust=0.9):
@@ -188,7 +191,7 @@ def create_df(ka, ma_params=(5, 20, 120, 250), use_macd=True, use_boll=True):
 
 
 class KlineAnalyze(object):
-    def __init__(self, kline, name="本级别", bi_mode="new", xd_mode="strict", handle_last=True, debug=False):
+    def __init__(self, kline, name="本级别", bi_mode="new", xd_mode="strict", handle_last=True, debug=True):
         """
 
         :param kline: list of dict or pd.DataFrame
@@ -218,7 +221,9 @@ class KlineAnalyze(object):
         self.xd_mode = xd_mode
         self.handle_last = handle_last
         self.debug = debug
+        log.debug(kline)
         self.kline = self._preprocess(kline)
+        log.debug(kline)
         self.symbol = self.kline[0]['symbol']
         self.latest_price = self.kline[-1]['close']
         self.start_dt = self.kline[0]['dt']
