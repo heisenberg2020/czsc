@@ -11,8 +11,7 @@ setup(
     description="缠中说禅技术分析工具",
     long_description="缠中说禅技术分析工具，源自 http://blog.sina.com.cn/chzhshch",
     license="MIT",
-
-    url="https://github.com/zengbin93/czsc",
+    url="https://github.com/heisenberg2020/czsc",
     packages=find_packages(exclude=['test', 'images', 'docs']),
     include_package_data=True,
     install_requires=["pandas", "pyecharts", "mplfinance", "tushare", "matplotlib"],
