@@ -375,16 +375,16 @@ class KlineAnalyze(object):
         
         seq = [x for x in points if x['fx_mark'] == fx_mark]
 
-        log.debug(seq)
+        log.debug("seq---")
         for v in seq:
             log.debug(v)
 
         seq = sorted(seq, key=lambda x: x['dt'], reverse=False)
-
+        
         p = [seq[0]]
         i = 1
         while i < len(seq):
-            s1 = p[-1]
+            s1 = p[-1] # 取最后一个
             s2 = seq[i]
             if fx_mark == 'd':
                 # 对于底，前面的高于后面的，只保留后面的
