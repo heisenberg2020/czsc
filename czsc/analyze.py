@@ -9,7 +9,7 @@ from .utils import plot_kline, plot_ka
 from .logger import Logger
 
 log = Logger('all.log',level='debug').logger
-
+log.propagate = 0
 
 def is_bei_chi(ka, zs1, zs2, mode="bi", adjust=0.9):
     """判断 zs1 对 zs2 是否有背驰
@@ -229,6 +229,10 @@ class KlineAnalyze(object):
         self.start_dt = self.kline[0]['dt']
         self.end_dt = self.kline[-1]['dt']
         self.kline_new = self._remove_include()
+        log.debug("self.kline_new")
+        for i in range(0,len(self.kline_new)):
+            log.debug(self.kline_new[i])
+        
         self.fx = self._find_fx()
         self.bi = self._find_bi()
         self.xd = self._find_xd()
@@ -290,16 +294,16 @@ class KlineAnalyze(object):
             # 左包含 or 右包含
             if (cur_h <= last_h and cur_l >= last_l) or (cur_h >= last_h and cur_l <= last_l):
                 # 有包含关系，按方向分别处理
-                if direction == "up":
+                if direction == "up": # 方向向上取高中高低中高
                     last_h = max(last_h, cur_h)
                     last_l = max(last_l, cur_l)
-                elif direction == "down":
+                elif direction == "down": # 方向向下取高中低低中低
                     last_h = min(last_h, cur_h)
                     last_l = min(last_l, cur_l)
                 else:
                     raise ValueError
 
-                k_new.pop(-1)
+                k_new.pop(-1) # 存在包含关系，该处k线无意义去掉
                 k_new.append({
                     "symbol": k['symbol'],
                     "dt": k['dt'],
@@ -341,7 +345,7 @@ class KlineAnalyze(object):
         """
         i = 0
         while i < len(self.kline_new):
-            if i == 0 or i == len(self.kline_new) - 1:
+            if i == 0 or i == len(self.kline_new) - 1: # i不能是第一个或者最后一个
                 i += 1
                 continue
             k1, k2, k3 = self.kline_new[i - 1: i + 2]
@@ -368,8 +372,13 @@ class KlineAnalyze(object):
             points = self.bi
         else:
             raise ValueError
-
+        
         seq = [x for x in points if x['fx_mark'] == fx_mark]
+
+        log.debug(seq)
+        for v in seq:
+            log.debug(v)
+
         seq = sorted(seq, key=lambda x: x['dt'], reverse=False)
 
         p = [seq[0]]
