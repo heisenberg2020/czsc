@@ -223,7 +223,7 @@ class KlineAnalyze(object):
         self.debug = debug
         log.debug(kline)
         self.kline = self._preprocess(kline)
-        log.debug(kline)
+        log.debug(self.kline)
         self.symbol = self.kline[0]['symbol']
         self.latest_price = self.kline[-1]['close']
         self.start_dt = self.kline[0]['dt']
@@ -243,7 +243,9 @@ class KlineAnalyze(object):
         """新增分析所需字段"""
         if isinstance(kline, pd.DataFrame):
             columns = kline.columns.to_list()
+            log.debug(columns)
             kline = [{k: v for k, v in zip(columns, row)} for row in kline.values]
+            log.debug(kline)
 
         results = []
         for k in kline:
