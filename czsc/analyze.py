@@ -336,7 +336,7 @@ class KlineAnalyze(object):
 
     def _find_fx(self):
         """识别线分型标记
-
+        包含处理后找到所有可能的分型
         o   非分型
         d   底分型
         g   顶分型
@@ -386,12 +386,12 @@ class KlineAnalyze(object):
         while i < len(seq):
             s1 = p[-1] # 取最后一个
             s2 = seq[i]
-            if fx_mark == 'd':
+            if fx_mark == 'd': # 对于低保留较低
                 # 对于底，前面的高于后面的，只保留后面的
                 if s1[mode] >= s2[mode]:
                     p.pop(-1)
                 p.append(s2)
-            elif fx_mark == 'g':
+            elif fx_mark == 'g': # 对于顶保留较高
                 # 对于顶，前面的低于后面的，只保留后面的
                 if s1[mode] <= s2[mode]:
                     p.pop(-1)
@@ -399,6 +399,11 @@ class KlineAnalyze(object):
             else:
                 raise ValueError
             i += 1
+        
+        log.debug("seq---2")
+        for v in p:
+            log.debug(v)
+
         return p
 
     def __handle_hist_bi(self):
@@ -426,8 +431,15 @@ class KlineAnalyze(object):
             if len(k_num) >= min_k_num:
                 fx_p.append(fx1)
                 fx_p.append(fx2)
+        log.debug("seq---3")
+        for v in fx_p:
+            log.debug(v)
 
         fx_p = sorted(fx_p, key=lambda x: x['dt'], reverse=False)
+
+        log.debug("seq---4")
+        for v in fx_p:
+            log.debug(v)
 
         # 确认哪些分型可以构成笔
         bi = []
