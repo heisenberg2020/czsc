@@ -1,6 +1,5 @@
 # coding: utf-8
 import traceback
-from copy import deepcopy
 import pandas as pd
 from functools import lru_cache
 
@@ -191,9 +190,11 @@ def create_df(ka, ma_params=(5, 20, 120, 250), use_macd=True, use_boll=True):
 
 
 class KlineAnalyze(object):
-    def __init__(self, kline, name="本级别", bi_mode="new", xd_mode="strict", handle_last=True, debug=True):
-        """
 
+    def __init__(self, kline, name="本级别", bi_mode="new", xd_mode="strict",
+                 min_bi_gap=0.001, handle_last=True, debug=False):
+
+        """
         :param kline: list of dict or pd.DataFrame
             example kline:
             kline = [
@@ -210,6 +211,8 @@ class KlineAnalyze(object):
         :param xd_mode: str
             线段识别控制参数，默认为 loose，在这种模式下，只要线段标记内有三笔就满足会识别；另外一个可选值是 strict，
             在 strict 模式下，对于三笔形成的线段，要求其后的一笔不跌破或升破线段最后一笔的起始位置。
+        :param min_bi_gap: float
+           笔内部缺口的最小百分比，默认值 0.001
         :param handle_last: bool
             是否使用默认的 handle_last 方法，默认值为 True
         """
@@ -220,6 +223,7 @@ class KlineAnalyze(object):
         self.bi_mode = bi_mode
         self.xd_mode = xd_mode
         self.handle_last = handle_last
+        self.min_bi_gap = min_bi_gap
         self.debug = debug
         log.debug(kline)
         self.kline = self._preprocess(kline)
@@ -303,20 +307,37 @@ class KlineAnalyze(object):
                 else:
                     raise ValueError
 
-                k_new.pop(-1) # 存在包含关系，该处k线无意义去掉
-                k_new.append({
-                    "symbol": k['symbol'],
-                    "dt": k['dt'],
-                    "open": k['open'],
-                    "close": k['close'],
-                    "high": last_h,
-                    "low": last_l,
-                    "vol": k['vol'],
-                    "fx_mark": k['fx_mark'],
-                    "fx": k['fx'],
-                    "bi": k['bi'],
-                    "xd": k['xd'],
-                })
+
+                k_new.pop(-1)
+                if k['open'] >= k['close']:
+                    k_new.append({
+                        "symbol": k['symbol'],
+                        "dt": k['dt'],
+                        "open": last_h,
+                        "close": last_l,
+                        "high": last_h,
+                        "low": last_l,
+                        "vol": k['vol'],
+                        "fx_mark": k['fx_mark'],
+                        "fx": k['fx'],
+                        "bi": k['bi'],
+                        "xd": k['xd'],
+                    })
+                else:
+                    k_new.append({
+                        "symbol": k['symbol'],
+                        "dt": k['dt'],
+                        "open": last_l,
+                        "close": last_h,
+                        "high": last_h,
+                        "low": last_l,
+                        "vol": k['vol'],
+                        "fx_mark": k['fx_mark'],
+                        "fx": k['fx'],
+                        "bi": k['bi'],
+                        "xd": k['xd'],
+                    })
+
             else:
                 # 无包含关系，更新 K 线
                 k_new.append({
@@ -344,6 +365,7 @@ class KlineAnalyze(object):
         :return:
         """
         i = 0
+        fx = []
         while i < len(self.kline_new):
             if i == 0 or i == len(self.kline_new) - 1: # i不能是第一个或者最后一个
                 i += 1
@@ -355,14 +377,28 @@ class KlineAnalyze(object):
             if k2['high'] > k1['high'] and k2['high'] > k3['high']:
                 k2['fx_mark'] = 'g'
                 k2['fx'] = k2['high']
+                fx.append({
+                    "dt": k2['dt'],
+                    "fx_mark": "g",
+                    "fx": k2['high'],
+                    "fx_high": k2['high'],
+                    "fx_low": max(k1['low'], k2['low'])
+                })
 
             # 底分型标记
             if k2['low'] < k1['low'] and k2['low'] < k3['low']:
                 k2['fx_mark'] = 'd'
                 k2['fx'] = k2['low']
+                fx.append({
+                    "dt": k2['dt'],
+                    "fx_mark": "d",
+                    "fx": k2['low'],
+                    "fx_high": min(k1['high'], k2['high']),
+                    "fx_low": k2['low']
+                })
 
-        fx = [{"dt": x['dt'], "fx_mark": x['fx_mark'], "fx": x['fx']}
-              for x in self.kline_new if x['fx_mark'] in ['d', 'g']]
+        # fx = [{"dt": x['dt'], "fx_mark": x['fx_mark'], "fx": x['fx']}
+        #       for x in self.kline_new if x['fx_mark'] in ['d', 'g']]
         return fx
 
     def __extract_potential(self, mode='fx', fx_mark='d'):
@@ -384,25 +420,32 @@ class KlineAnalyze(object):
         p = [seq[0]]
         i = 1
         while i < len(seq):
-            s1 = p[-1] # 取最后一个
-            s2 = seq[i]
-            if fx_mark == 'd': # 对于低保留较低
+
+            if fx_mark == 'd':
                 # 对于底，前面的高于后面的，只保留后面的
-                if s1[mode] >= s2[mode]:
-                    p.pop(-1)
-                p.append(s2)
-            elif fx_mark == 'g': # 对于顶保留较高
+                s1 = seq[i-1]
+                s2 = seq[i]
+                if i == len(seq) - 1:
+                    p.append(s2)
+                else:
+                    s3 = seq[i + 1]
+                    if s1[mode] > s2[mode] < s3[mode]:
+                        p.append(s2)
+
+            elif fx_mark == 'g':
+
                 # 对于顶，前面的低于后面的，只保留后面的
-                if s1[mode] <= s2[mode]:
-                    p.pop(-1)
-                p.append(s2)
+                s1 = seq[i-1]
+                s2 = seq[i]
+                if i == len(seq) - 1:
+                    p.append(s2)
+                else:
+                    s3 = seq[i + 1]
+                    if s1[mode] < s2[mode] > s3[mode]:
+                        p.append(s2)
             else:
                 raise ValueError
             i += 1
-        
-        log.debug("seq---2")
-        for v in p:
-            log.debug(v)
 
         return p
 
@@ -418,24 +461,8 @@ class KlineAnalyze(object):
         self.min_k_num = min_k_num
         kn = self.kline_new
 
-        fx_p = []  # 存储潜在笔标记
-        fx_p.extend(self.__extract_potential(mode='fx', fx_mark='d'))
-        fx_p.extend(self.__extract_potential(mode='fx', fx_mark='g'))
+        fx_p = self.fx
 
-        # 加入满足笔条件的连续两个分型
-        fx = self.fx
-        for i in range(len(fx) - 1):
-            fx1 = fx[i]
-            fx2 = fx[i + 1]
-            k_num = [x for x in kn if fx1['dt'] <= x['dt'] <= fx2['dt']]
-            if len(k_num) >= min_k_num:
-                fx_p.append(fx1)
-                fx_p.append(fx2)
-        log.debug("seq---3")
-        for v in fx_p:
-            log.debug(v)
-
-        fx_p = sorted(fx_p, key=lambda x: x['dt'], reverse=False)
 
         log.debug("seq---4")
         for v in fx_p:
@@ -444,9 +471,13 @@ class KlineAnalyze(object):
         # 确认哪些分型可以构成笔
         bi = []
         for i in range(len(fx_p)):
-            k = deepcopy(fx_p[i])
-            k['bi'] = k['fx']
-            del k['fx']
+            k = {
+                "dt": fx_p[i]['dt'],
+                "fx_mark": fx_p[i]['fx_mark'],
+                "bi": fx_p[i]['fx'],
+                "fx_high": fx_p[i]['fx_high'],
+                "fx_low": fx_p[i]['fx_low'],
+            }
             if len(bi) == 0:
                 bi.append(k)
             else:
@@ -457,16 +488,37 @@ class KlineAnalyze(object):
                         bi.pop(-1)
                         bi.append(k)
                 else:
-                    # 确保相邻两个顶底之间顶大于底
-                    if (k0['fx_mark'] == 'g' and k['bi'] >= k0['bi']) or \
-                            (k0['fx_mark'] == 'd' and k['bi'] <= k0['bi']):
-                        bi.pop(-1)
+                    k_inside = [x for x in kn if k0['dt'] <= x['dt'] <= k['dt']]
+
+                    # 缺口处理：缺口的出现说明某一方力量很强，当做N根K线处理
+                    k_pair = [k_inside[x: x+2] for x in range(len(k_inside)-2)]
+                    has_gap = False
+                    for pair in k_pair:
+                        kr, kl = pair
+                        # 向下缺口
+                        if kr['low'] > kl['high'] * (1+self.min_bi_gap):
+                            has_gap = True
+                            break
+
+                        # 向上缺口
+                        if kr['high'] < kl['low'] * (1-self.min_bi_gap):
+                            has_gap = True
+                            break
+
+                    if has_gap:
+                        # bi.append(k)
+                        if (k0['fx_mark'] == 'g' and k['fx_high'] < k0['fx_low']) or \
+                                (k0['fx_mark'] == 'd' and k['fx_low'] > k0['fx_high']):
+                            bi.append(k)
                         continue
 
-                    # 一笔的顶底分型之间至少包含5根K线（新笔只需要4根）
-                    k_num = [x for x in kn if k0['dt'] <= x['dt'] <= k['dt']]
-                    if len(k_num) >= min_k_num:
-                        bi.append(k)
+                    # max_high = max([x['high'] for x in k_inside])
+                    # min_low = min([x['low'] for x in k_inside])
+                    if len(k_inside) >= min_k_num:
+                        # 确保相邻两个顶底之间顶大于底，并且笔分型是极值
+                        if (k0['fx_mark'] == 'g' and k['fx_high'] < k0['fx_low']) or \
+                                (k0['fx_mark'] == 'd' and k['fx_low'] > k0['fx_high']):
+                            bi.append(k)
         return bi
 
     def __handle_last_bi(self, bi):
@@ -476,6 +528,7 @@ class KlineAnalyze(object):
         """
         last_bi = bi[-1]
         last_k = self.kline_new[-1]
+
         if (last_bi['fx_mark'] == 'd' and last_k['low'] < last_bi['bi']) \
                 or (last_bi['fx_mark'] == 'g' and last_k['high'] > last_bi['bi']):
             bi.pop(-1)
@@ -506,9 +559,11 @@ class KlineAnalyze(object):
 
         xd = []
         for i in range(len(bi_p)):
-            k = deepcopy(bi_p[i])
-            k['xd'] = k['bi']
-            del k['bi']
+            k = {
+                "dt": bi_p[i]['dt'],
+                "fx_mark": bi_p[i]['fx_mark'],
+                "xd": bi_p[i]['bi'],
+            }
             if len(xd) == 0:
                 xd.append(k)
             else:
@@ -525,28 +580,38 @@ class KlineAnalyze(object):
                             (k0['fx_mark'] == 'd' and k['xd'] <= k0['xd']):
                         xd.pop(-1)
                         continue
+
                     bi_m = [x for x in self.bi if k0['dt'] <= x['dt'] <= k['dt']]
                     bi_r = [x for x in self.bi if x['dt'] >= k['dt']]
                     # 一线段内部至少三笔
-                    if len(bi_m) >= 4:
-                        # 两个连续线段标记之间只有三笔的处理，这里区分 loose 和 strict 两种模式
-                        if len(bi_m) == 4:
-                            if self.xd_mode == 'loose':
-                                if (k['fx_mark'] == "g" and bi_m[-1]['bi'] > bi_m[-3]['bi']) \
-                                        or (k['fx_mark'] == "d" and bi_m[-1]['bi'] < bi_m[-3]['bi']):
-                                    xd.append(k)
-                            elif self.xd_mode == 'strict':
-                                if len(bi_r) <= 1:
-                                    continue
-                                lp2 = bi_m[-2]
-                                rp2 = bi_r[1]
-                                if (k['fx_mark'] == "g" and lp2['bi'] < rp2['bi'] and bi_m[-1]['bi'] > bi_m[-3]['bi']) \
-                                        or (k['fx_mark'] == "d" and lp2['bi'] > rp2['bi']
-                                            and bi_m[-1]['bi'] < bi_m[-3]['bi']):
-                                    xd.append(k)
-                            else:
-                                raise ValueError("xd_mode value error")
-                        else:
+                    if len(bi_m) < 4 or len(bi_r) < 4:
+                        continue
+
+                    # 线段的顶必然大于相邻的两个顶；线段的底必然小于相邻的两个底
+                    assert k['fx_mark'] == bi_m[-3]['fx_mark'] == bi_r[2]['fx_mark']
+                    if k['fx_mark'] == "d" and not (bi_m[-3]['bi'] > k['xd'] < bi_r[2]['bi']):
+                        print("不满足线段的底必然小于相邻的两个底")
+                        print(bi_m[-3], k, bi_r[2])
+                        continue
+
+                    if k['fx_mark'] == "g" and not (bi_m[-3]['bi'] < k['xd'] > bi_r[2]['bi']):
+                        print("不满足线段的顶必然大于相邻的两个顶")
+                        print(bi_m[-3], k, bi_r[2])
+                        continue
+
+                    # 判断线段标记是否有效
+                    left_last = bi_m[-3]
+                    right_first = bi_r[1]
+                    assert left_last['fx_mark'] != right_first['fx_mark']
+
+                    if k['fx_mark'] == 'd':
+                        max_g = max([x['bi'] for x in bi_r[:8] if x['fx_mark'] == 'g'])
+                        if max_g > right_first['bi'] and max_g > left_last['bi']:
+                            xd.append(k)
+
+                    if k['fx_mark'] == 'g':
+                        min_d = min([x['bi'] for x in bi_r[:8] if x['fx_mark'] == 'd'])
+                        if min_d < right_first['bi'] and min_d < left_last['bi']:
                             xd.append(k)
         return xd
 
