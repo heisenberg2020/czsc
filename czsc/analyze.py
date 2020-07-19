@@ -177,6 +177,115 @@ def find_zs(points):
 
     return k_zs
 
+def find_zs_new(points):
+    """输入笔或线段标记点，输出中枢识别结果"""
+    if len(points) <= 4:
+        return []
+
+    # 当输入为笔的标记点时，新增 xd 值
+    for i, x in enumerate(points):
+        if x.get("bi", 0):
+            points[i]['xd'] = x["bi"]
+
+    log.debug(points)            
+    
+    # log.debug(xd)
+    
+    # xd = xd.reset_index(drop=False)
+
+    # log.debug('first')
+    # log.debug()
+    # log.debug('first')
+    # log.debug(xd['xd'].argmin())
+  
+    # log.debug(xd)
+
+    zs = []
+    while True:
+        xd = pd.DataFrame(points)
+        maxValueId = xd['xd'].argmax()
+        minValueId = xd['xd'].argmin()
+        log.debug(maxValueId, minValueId)
+        tmpPoints = []
+        if maxValueId > minValueId :
+            tmpPoints = points[minValueId:maxValueId+1]
+            points = points[maxValueId:]
+        else:
+            tmpPoints = points[maxValueId:minValueId+1]
+            points = points[minValueId:]
+        log.debug(tmpPoints)
+        if len(tmpPoints) < 4:
+            break
+        tmp = find_zs_section(tmpPoints)
+        log.debug(tmp)
+        zs.extend(tmp)
+    log.debug('zs')
+    log.debug(zs)
+    return zs
+
+def find_zs_section(points):
+    k_xd = points
+    k_zs = []
+    zs_xd = []
+
+    for i in range(len(k_xd)):
+        if len(zs_xd) < 5:
+            zs_xd.append(k_xd[i])
+            continue
+        xd_p = k_xd[i]
+        zs_d = max([x['xd'] for x in zs_xd[:4] if x['fx_mark'] == 'd'])
+        zs_g = min([x['xd'] for x in zs_xd[:4] if x['fx_mark'] == 'g'])
+        if zs_g <= zs_d:
+            zs_xd.append(k_xd[i])
+            zs_xd.pop(0)
+            continue
+
+        # 定义四个指标,GG=max(gn),G=min(gn),D=max(dn),DD=min(dn)，
+        # n遍历中枢中所有Zn。特别地，再定义ZG=min(g1、g2),
+        # ZD=max(d1、d2)，显然，[ZD，ZG]就是缠中说禅走势中枢的区间
+        if xd_p['fx_mark'] == "d" and xd_p['xd'] > zs_g:
+            # 线段在中枢上方结束，形成三买
+            k_zs.append({
+                'ZD': zs_d,
+                "ZG": zs_g,
+                'G': min([x['xd'] for x in zs_xd if x['fx_mark'] == 'g']),
+                'GG': max([x['xd'] for x in zs_xd if x['fx_mark'] == 'g']),
+                'D': max([x['xd'] for x in zs_xd if x['fx_mark'] == 'd']),
+                'DD': min([x['xd'] for x in zs_xd if x['fx_mark'] == 'd']),
+                "points": zs_xd,
+                "third_buy": xd_p
+            })
+            zs_xd = k_xd[i - 1: i + 1]
+        elif xd_p['fx_mark'] == "g" and xd_p['xd'] < zs_d:
+            # 线段在中枢下方结束，形成三卖
+            k_zs.append({
+                'ZD': zs_d,
+                "ZG": zs_g,
+                'G': min([x['xd'] for x in zs_xd if x['fx_mark'] == 'g']),
+                'GG': max([x['xd'] for x in zs_xd if x['fx_mark'] == 'g']),
+                'D': max([x['xd'] for x in zs_xd if x['fx_mark'] == 'd']),
+                'DD': min([x['xd'] for x in zs_xd if x['fx_mark'] == 'd']),
+                "points": zs_xd,
+                "third_sell": xd_p
+            })
+            zs_xd = k_xd[i - 1: i + 1]
+        else:
+            zs_xd.append(xd_p)
+
+    if len(zs_xd) >= 5:
+        zs_d = max([x['xd'] for x in zs_xd[:4] if x['fx_mark'] == 'd'])
+        zs_g = min([x['xd'] for x in zs_xd[:4] if x['fx_mark'] == 'g'])
+        k_zs.append({
+            'ZD': zs_d,
+            "ZG": zs_g,
+            'G': min([x['xd'] for x in zs_xd if x['fx_mark'] == 'g']),
+            'GG': max([x['xd'] for x in zs_xd if x['fx_mark'] == 'g']),
+            'D': max([x['xd'] for x in zs_xd if x['fx_mark'] == 'd']),
+            'DD': min([x['xd'] for x in zs_xd if x['fx_mark'] == 'd']),
+            "points": zs_xd,
+        })
+
+    return k_zs
 
 @lru_cache(maxsize=64)
 def create_df(ka, ma_params=(5, 20, 120, 250), use_macd=True, use_boll=True):
@@ -191,7 +300,7 @@ def create_df(ka, ma_params=(5, 20, 120, 250), use_macd=True, use_boll=True):
 
 class KlineAnalyze(object):
 
-    def __init__(self, kline, name="本级别", bi_mode="new", xd_mode="strict",
+    def __init__(self, kline, name="本级别", bi_mode="old", xd_mode="strict",
                  min_bi_gap=0.001, handle_last=True, debug=False):
 
         """
@@ -224,23 +333,18 @@ class KlineAnalyze(object):
         self.xd_mode = xd_mode
         self.handle_last = handle_last
         self.min_bi_gap = min_bi_gap
-        self.debug = debug
-        log.debug(kline)
+        self.debug = debug 
         self.kline = self._preprocess(kline)
-        log.debug(self.kline)
+        #log.debug(self.kline)
         self.symbol = self.kline[0]['symbol']
         self.latest_price = self.kline[-1]['close']
         self.start_dt = self.kline[0]['dt']
         self.end_dt = self.kline[-1]['dt']
-        self.kline_new = self._remove_include()
-        log.debug("self.kline_new")
-        for i in range(0,len(self.kline_new)):
-            log.debug(self.kline_new[i])
-        
+        self.kline_new = self._remove_include()  
         self.fx = self._find_fx()
         self.bi = self._find_bi()
         self.xd = self._find_xd()
-        self.zs = find_zs(self.xd)
+        self.zs = find_zs_new(self.xd)
         self.__update_kline()
 
     def __repr__(self):
@@ -251,9 +355,9 @@ class KlineAnalyze(object):
         """新增分析所需字段"""
         if isinstance(kline, pd.DataFrame):
             columns = kline.columns.to_list()
-            log.debug(columns)
+            #log.debug(columns)
             kline = [{k: v for k, v in zip(columns, row)} for row in kline.values]
-            log.debug(kline)
+            #log.debug(kline)
 
         results = []
         for k in kline:
@@ -411,9 +515,9 @@ class KlineAnalyze(object):
         
         seq = [x for x in points if x['fx_mark'] == fx_mark]
 
-        log.debug("seq---")
-        for v in seq:
-            log.debug(v)
+       #log.debug("seq---")
+        # for v in seq:
+        #     log.debug(v)
 
         seq = sorted(seq, key=lambda x: x['dt'], reverse=False)
         
@@ -464,9 +568,9 @@ class KlineAnalyze(object):
         fx_p = self.fx
 
 
-        log.debug("seq---4")
-        for v in fx_p:
-            log.debug(v)
+        #log.debug("seq---4")
+        # for v in fx_p:
+        #     log.debug(v)
 
         # 确认哪些分型可以构成笔
         bi = []
@@ -603,16 +707,17 @@ class KlineAnalyze(object):
                     left_last = bi_m[-3]
                     right_first = bi_r[1]
                     assert left_last['fx_mark'] != right_first['fx_mark']
+                    xd.append(k)
 
-                    if k['fx_mark'] == 'd':
-                        max_g = max([x['bi'] for x in bi_r[:8] if x['fx_mark'] == 'g'])
-                        if max_g > right_first['bi'] and max_g > left_last['bi']:
-                            xd.append(k)
+                    # if k['fx_mark'] == 'd':
+                    #     max_g = max([x['bi'] for x in bi_r[:8] if x['fx_mark'] == 'g'])
+                    #     if max_g > right_first['bi'] and max_g > left_last['bi']:
+                    #         xd.append(k)
 
-                    if k['fx_mark'] == 'g':
-                        min_d = min([x['bi'] for x in bi_r[:8] if x['fx_mark'] == 'd'])
-                        if min_d < right_first['bi'] and min_d < left_last['bi']:
-                            xd.append(k)
+                    # if k['fx_mark'] == 'g':
+                    #     min_d = min([x['bi'] for x in bi_r[:8] if x['fx_mark'] == 'd'])
+                    #     if min_d < right_first['bi'] and min_d < left_last['bi']:
+                    #         xd.append(k)
         return xd
 
     def __handle_last_xd(self, xd):

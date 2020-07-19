@@ -21,7 +21,7 @@ set_token("03210e0e39013a46836b3afb9d25b57b871df5a2")
 log = Logger('all.log',level='debug').logger
 
 
-def get_kline(symbol, end_date=None, freq='1d', k_count=30):
+def get_kline(symbol, end_date=None, freq='1d', k_count=3000):
     """从掘金获取历史K线数据
 
     参考： https://www.myquant.cn/docs/python/python_select_api#6fb030ec42984aff
@@ -57,7 +57,7 @@ def get_kline(symbol, end_date=None, freq='1d', k_count=30):
     for col in ['open', 'close', 'high', 'low']:
         df[col] = df[col].apply(round, args=(2,))
 
-    log.debug(df)
+    
     return df
 
 
@@ -95,8 +95,11 @@ def use_solid_analyze():
 if __name__ == '__main__':
 
     log.debug('start')
-    pd.set_option('display.max_columns', None)    # 显示所有列
-    pd.set_option('display.max_rows', None)      # 显示所有行
+    pd.set_option('display.max_columns', 6000)    # 显示所有列
+    pd.set_option('display.max_rows', 6000)      # 显示所有行
+    pd.set_option('display.width', 6000)
+    pd.set_option('display.max_colwidth',1000)
+    
 
     use_kline_analyze()
     #use_solid_analyze()

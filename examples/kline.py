@@ -74,21 +74,26 @@ def get_gm_kline(symbol, end_date, freq='D', k_count=3000):
             end_date += timedelta(days=1)
     
     df = history_n(symbol=symbol, frequency=freq, end_time=end_date,
-                   fields='symbol,eob,open,close,high,low,volume',
+                   fields='symbol,eob,open,close,high,low,volume,amount',
                    count=k_count, df=True)
-    
+
+    #df = df_old[1:]                   
+    #df['last_close'] = df_old['close']
     df['dt'] = df['eob']
     df['vol'] = df['volume']
 
-    df = df[['symbol', 'dt', 'open', 'close', 'high', 'low', 'vol']] #调整列的顺序
+    df = df[['symbol', 'dt' ,'open', 'close', 'high', 'low', 'vol','amount']] #调整列的顺序
+
+    
     
     df.sort_values('dt', inplace=True, ascending=True)
-    df['dt'] = df.dt.apply(lambda x: x.strftime(r"%Y-%m-%d %H:%M:%S"))
+    #df['dt'] = df.dt.apply(lambda x: x.strftime(r"%Y-%m-%d %H:%M:%S"))
+    df['dt'] = df.dt.apply(lambda x: x.strftime(r"%Y%m%d"))
     df.reset_index(drop=True, inplace=True)
     for col in ['open', 'close', 'high', 'low']:
         df[col] = df[col].apply(round, args=(2,))  
 
-    log.debug(df)  
+    #log.debug(df)  
     return df
 
 
@@ -115,20 +120,51 @@ class KlineHandler(BaseHandler):
         ts_code = self.get_argument('ts_code')
         freq = self.get_argument('freq')
         trade_date = self.get_argument('trade_date')
+        #k_count = self.get_argument('k_count')
         if trade_date == 'null':
             trade_date = datetime.now().date().__str__().replace("-", "")
         log.debug(ts_code)
         log.debug(freq)
         log.debug(trade_date)
-        kline = get_gm_kline(symbol=ts_code, end_date=trade_date, freq=freq, k_count=1440)
+        #log.debug(k_count)
+        kline_old = get_gm_kline(symbol=ts_code, end_date=trade_date, freq=freq, k_count=6000)
+        kline = kline_old.copy()
+
         ka = KlineAnalyze(kline)
-        kline = pd.DataFrame(ka.kline)
-        kline = kline.fillna("")
-        columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
+        columns = ["dt", "bi"]
+        bi = ka.bi
+        log.debug('bi')
+        log.debug(bi)
+        columns = ["dt", "xd"]
+        xd = ka.xd
+        log.debug('xd')
+        log.debug(xd)
+        zs = ka.zs
 
-        self.finish({'kdata': kline[columns].values.tolist()})        
+        kline_old.drop([len(kline_old)-1],inplace=True)
+        kline_old = kline_old.reset_index(drop=True)
+        kline.drop([0],inplace=True)
+        kline=  kline.reset_index(drop=True)
+        kline['last_close'] = kline_old['close']
 
+        
+        #log.debug(kline_old)
+        #log.debug(kline)
+        if len(kline) > 1 :
+            columns = ["dt", "last_close", "open", "high","low","close", "vol", 'amount']
+            log.debug('symbol')
+            log.debug(kline.iloc[0,0])
+            self.finish({"kline":{"symbol":kline.iloc[0,0],
+            "count": len(kline),
+            "version": '1.0' ,
+            "message": '', 
+            "code": 0,
+            'data': kline[columns].values.tolist()},"ka":{'bi': bi, "xd": xd, "zs": zs}})        
 
+        #ka = KlineAnalyze(kline)
+        #kline = pd.DataFrame(ka.kline)
+        #kline = kline.fillna("")
+        #columns = ["dt", "open", "close", "low", "high", "vol", 'fx_mark', 'fx', 'bi', 'xd']
 if __name__ == '__main__':
     pd.set_option('display.max_columns', None)    # 显示所有列
     pd.set_option('display.max_rows', None)      # 显示所有行
@@ -137,12 +173,11 @@ if __name__ == '__main__':
     conf.readfp(open("config.ini"))
     token = conf.get("juejin","token")
     
-    log.debug("set token")
+    log.debug(token)
     set_token(token)
 
     app = Application([
             ('/kline', KlineHandler),
-    
         ],
         
         dubug=True
